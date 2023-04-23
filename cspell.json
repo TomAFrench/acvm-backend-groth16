@@ -1,0 +1,16 @@
+{
+    "version": "0.2",
+    "ignorePaths": [
+        "target"
+    ],
+    "words": [
+        "acir",
+        "acvm",
+        "arkworks",
+        "clippy",
+        "groth",
+        "preprocess",
+        "rngs",
+        "seedable"
+    ]
+}

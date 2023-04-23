@@ -1,0 +1,21 @@
+[package]
+name = "acvm-backend-groth16"
+version = "0.1.0"
+authors = ["The Noir Team <team@noir-lang.org>"]
+edition = "2021"
+rust-version = "1.66"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+acvm = "0.9.0"
+arkworks_backend = { git = "https://github.com/noir-lang/arkworks_backend", rev = "17db6b654291bb3ead8a2e20e676c495070b3a6b", default-features = false }
+ark-groth16 = "0.4.0"
+
+ark-snark = { version = "0.4.0", default-features = false }
+ark-std = { version = "0.4.0", features = ["std", "getrandom"] }
+ark-serialize = { version = "0.4.0", default-features = false, features = ["derive"] }
+
+[features]
+default = ["bn254"]
+bn254 = ["acvm/bn254", "arkworks_backend/bn254"]
+bls12_381 = ["acvm/bls12_381", "arkworks_backend/bls12_381"]
