@@ -1,16 +1,31 @@
-use acvm::acir::{circuit::opcodes::BlackBoxFuncCall, native_types::Witness};
-use acvm::{FieldElement, OpcodeResolution};
-use acvm::{OpcodeResolutionError, PartialWitnessGenerator};
-use std::collections::BTreeMap;
+use acvm::pwg::OpcodeResolutionError;
+use acvm::{BlackBoxFunctionSolver, FieldElement};
 
 use crate::ArkworksGroth16;
 
-impl PartialWitnessGenerator for ArkworksGroth16 {
-    fn solve_black_box_function_call(
+impl BlackBoxFunctionSolver for ArkworksGroth16 {
+    fn schnorr_verify(
         &self,
-        _initial_witness: &mut BTreeMap<Witness, FieldElement>,
-        _func_call: &BlackBoxFuncCall,
-    ) -> Result<OpcodeResolution, OpcodeResolutionError> {
+        _public_key_x: &FieldElement,
+        _public_key_y: &FieldElement,
+        _signature: &[u8],
+        _message: &[u8],
+    ) -> Result<bool, OpcodeResolutionError> {
+        unreachable!("Groth16 does not support black box functions. This code is only reachable if executing ACIR for a different backend");
+    }
+
+    fn pedersen(
+        &self,
+        _inputs: &[FieldElement],
+        _domain_separator: u32,
+    ) -> Result<(FieldElement, FieldElement), OpcodeResolutionError> {
+        unreachable!("Groth16 does not support black box functions. This code is only reachable if executing ACIR for a different backend");
+    }
+
+    fn fixed_base_scalar_mul(
+        &self,
+        _input: &FieldElement,
+    ) -> Result<(FieldElement, FieldElement), OpcodeResolutionError> {
         unreachable!("Groth16 does not support black box functions. This code is only reachable if executing ACIR for a different backend");
     }
 }

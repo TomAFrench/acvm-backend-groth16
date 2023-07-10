@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use acvm::acir::{circuit::Circuit, native_types::Witness, BlackBoxFunc};
-use acvm::FieldElement;
-use acvm::{Language, ProofSystemCompiler};
+use acvm::acir::circuit::{Circuit, Opcode};
+use acvm::acir::native_types::{Witness, WitnessMap};
+use acvm::{FieldElement, Language, ProofSystemCompiler};
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_snark::SNARK;
@@ -12,31 +12,37 @@ use ark_groth16::{PreparedVerifyingKey, Proof, ProvingKey};
 
 use arkworks_backend::{from_fe, Curve, CurveAcir};
 
-use crate::ArkworksGroth16;
+use crate::{ArkworksGroth16, BackendError};
 
 type Groth16 = ark_groth16::Groth16<Curve>;
 
 impl ProofSystemCompiler for ArkworksGroth16 {
+    type Error = BackendError;
+
     fn np_language(&self) -> Language {
         Language::R1CS
     }
 
-    fn get_exact_circuit_size(&self, circuit: &Circuit) -> u32 {
-        arkworks_backend::compute_num_constraints(circuit)
+    fn get_exact_circuit_size(&self, circuit: &Circuit) -> Result<u32, BackendError> {
+        Ok(arkworks_backend::compute_num_constraints(circuit))
     }
 
-    fn black_box_function_supported(&self, _opcode: &BlackBoxFunc) -> bool {
-        // R1CS only supports Arithmetic opcodes.
-        false
+    fn supports_opcode(&self, opcode: &Opcode) -> bool {
+        matches!(opcode, Opcode::Arithmetic(_))
     }
 
-    fn preprocess(&self, circuit: &Circuit) -> (Vec<u8>, Vec<u8>) {
+    fn preprocess(
+        &self,
+        common_reference_string: &[u8],
+        circuit: &Circuit,
+    ) -> Result<(Vec<u8>, Vec<u8>), BackendError> {
         // Note: This is insecure and will result in keys for which it is possible
         // to generate invalid proofs which the verifier will be accept as valid.
         //
         // If you are using Groth16 in production then you must generate proving and
         // verification keys through a proper trusted setup.
-        let mut rng = StdRng::seed_from_u64(1234);
+        let rng_seed: u64 = u64::from_be_bytes(common_reference_string.try_into().unwrap());
+        let mut rng = StdRng::seed_from_u64(rng_seed);
 
         let (pk, vk) = Groth16::circuit_specific_setup(CurveAcir::from(circuit), &mut rng).unwrap();
         let vk = PreparedVerifyingKey::from(vk);
@@ -48,20 +54,25 @@ impl ProofSystemCompiler for ArkworksGroth16 {
         vk.serialize_compressed(&mut vk_bytes)
             .expect("verification key should be serializable");
 
-        (pk_bytes, vk_bytes)
+        Ok((pk_bytes, vk_bytes))
     }
 
     fn prove_with_pk(
         &self,
+        _common_reference_string: &[u8],
         circuit: &Circuit,
-        witness_values: BTreeMap<Witness, FieldElement>,
+        witness_values: WitnessMap,
         proving_key: &[u8],
-    ) -> Vec<u8> {
+        _is_recursive: bool,
+    ) -> Result<Vec<u8>, Self::Error> {
         let pk = ProvingKey::deserialize_compressed(proving_key)
             .expect("Could not deserialize proving key");
 
         // TODO: This relies on seeded entropy from `OsRng`. Is this secure enough?
         let mut rng = thread_rng();
+
+        let witness_values: BTreeMap<Witness, FieldElement> =
+            BTreeMap::from_iter(witness_values.into_iter());
         let proof = Groth16::create_random_proof_with_reduction(
             CurveAcir::from((circuit, witness_values)),
             &pk,
@@ -73,22 +84,43 @@ impl ProofSystemCompiler for ArkworksGroth16 {
         proof
             .serialize_compressed(&mut bytes)
             .expect("proof should be serializable");
-        bytes
+        Ok(bytes)
     }
 
     fn verify_with_vk(
         &self,
+        _common_reference_string: &[u8],
         proof: &[u8],
-        public_inputs: BTreeMap<Witness, FieldElement>,
+        public_inputs: WitnessMap,
         _circuit: &Circuit,
         verification_key: &[u8],
-    ) -> bool {
+        _is_recursive: bool,
+    ) -> Result<bool, Self::Error> {
         let proof = Proof::deserialize_compressed(proof).expect("Could not deserialize proof");
         let vk = PreparedVerifyingKey::deserialize_compressed(verification_key)
             .expect("Could not deserialize verification key");
 
-        let flattened_public_inputs: Vec<_> = public_inputs.into_values().map(from_fe).collect();
+        let flattened_public_inputs: Vec<_> = public_inputs
+            .into_iter()
+            .map(|(_, value)| from_fe(value))
+            .collect();
 
-        Groth16::verify_proof(&vk, &proof, &flattened_public_inputs).unwrap()
+        Ok(Groth16::verify_proof(&vk, &proof, &flattened_public_inputs).unwrap())
+    }
+
+    fn proof_as_fields(
+        &self,
+        _proof: &[u8],
+        _public_inputs: WitnessMap,
+    ) -> Result<Vec<FieldElement>, Self::Error> {
+        todo!()
+    }
+
+    fn vk_as_fields(
+        &self,
+        _common_reference_string: &[u8],
+        _verification_key: &[u8],
+    ) -> Result<(Vec<FieldElement>, FieldElement), Self::Error> {
+        todo!()
     }
 }
